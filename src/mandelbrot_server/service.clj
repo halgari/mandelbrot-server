@@ -11,5 +11,6 @@
      (when-let [~nm ~expr]
        (try ~@body
             (catch Throwable ex# (do (println "Error! " ex#)
+                                     (println (st/root-cause ex#))
                                      (st/print-stack-trace ex#))))
        (recur))))

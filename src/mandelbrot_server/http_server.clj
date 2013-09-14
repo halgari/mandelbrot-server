@@ -1,12 +1,13 @@
 (ns mandelbrot-server.http-server
   (:require [mandelbrot-server.service :refer [ILifecycle start stop]]
             [clojure.core.async :refer :all]
-            [mandelbrot-server.globals :refer [system-state]]
+            [mandelbrot-server.globals :refer [system-state] :as globals]
             [clojure.edn :as edn]
             [org.httpkit.server :refer :all]
             [compojure.route :as route]
             [compojure.handler :refer [site]]
-            [compojure.core :refer [routes GET POST]]))
+            [compojure.core :refer [routes GET POST]]
+            [taoensso.timbre :as log]))
 
 (def server (atom nil))
 
@@ -18,11 +19,15 @@
   (dissoc state channel))
 
 (defn handle-requests [wc c]
-  nil
-  #_(go
-   (when-loop [request (<! c)]
-              (let [request (edn/read request)]
-                ))))
+  (go
+   (loop []
+     (when-let [request (<! c)]
+       (let [tmpc (chan 1)
+             img (<! (globals/opencl-request tmpc (float 1000)))
+             compressed (<! (globals/compress-image tmpc img))]
+         #_(globals/write-image compressed)
+         (send! wc compressed))
+       (recur)))))
 
 (defn make-channel [connected-clients channel]
   (swap! connected-clients
@@ -34,12 +39,15 @@
                (assoc state channel c))))))
 
 (defn async-handler [{:keys [connected-clients] :as service} req]
+  (log/info "async")
   (with-channel req channel
+    (log/info "channel")
     (on-close channel (fn [status]
                         (swap! connected-clients remove-client channel)))
     (make-channel connected-clients channel)
     (on-receive channel
                 (fn [data]
+                  (log/info "Connection:" channel)
                   (when-let [c (get @connected-clients channel)]
                             (put! c data))))))
 

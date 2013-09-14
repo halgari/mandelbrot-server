@@ -61,7 +61,7 @@
     (put! (-> @system-state
               :image-processor
               :request-channel)
-          [img 512 512 c])
+          [[img 512 512] c])
     c))
 
 (defn write-image [img]

@@ -20,7 +20,7 @@
               val (.getFloatAtIndex ptr idx)
               c (if (= val 1.0)
                   (Color/getHSBColor val 1 0)
-                  (Color/getHSBColor val (- 1.0 val) 0.5))]
+                  (Color/getHSBColor (+ 0.5 val) 1.0 0.5))]
           (.setRGB img x y (.getRGB c)))))
     img))
 
@@ -33,7 +33,7 @@
 
 (defn process-loop [{:keys [request-channel]}]
   (thread
-   (when-loop [[img width height response-channel :as msg] (<!! request-channel)]
+   (when-loop [[[img width height] response-channel :as msg] (<!! request-channel)]
               (println msg)
               (>!! response-channel (-> img
                                         (convert-image (long width) (long height))
