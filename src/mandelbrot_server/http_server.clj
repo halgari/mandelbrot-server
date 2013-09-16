@@ -22,8 +22,14 @@
   (go
    (loop []
      (when-let [request (<! c)]
-       (let [tmpc (chan 1)
-             img (<! (globals/opencl-request tmpc (float 1000)))
+       (log/info request)
+       (let [{:keys [zoom offset-y offset-x] :as parsed-request} (edn/read-string request)
+             tmpc (chan 1)
+             img (<! (globals/opencl-request tmpc
+                                             (float 1000)
+                                             (float zoom)
+                                             (float offset-x)
+                                             (float offset-y)))
              compressed (<! (globals/compress-image tmpc img))]
          #_(globals/write-image compressed)
          (send! wc compressed))

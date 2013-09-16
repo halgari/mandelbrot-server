@@ -21,14 +21,16 @@ float calc_iteration(float xpx, float ypx, float max, float width, float height)
 
 
 
-__kernel void mandelbrot(__global float* out, int width, int height, float max)
+__kernel void mandelbrot(__global float* out, int width, int height, float max, float zoom, float offset_x, float offset_y)
 {
         int x = get_global_id(0);
         int y = get_global_id(1);
 
         int out_offset = (y * width) + x;
 
+        float fx = (((float)x) + offset_x) / zoom;
+        float fy = (((float)y) + offset_y) / zoom;
 
-        out[out_offset] = calc_iteration((float)x, (float)y, max, (float)width, (float)height) / max;
+        out[out_offset] = calc_iteration(fx, fy, max, (float)width, (float)height) / max;
 
 }
