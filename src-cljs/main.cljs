@@ -10,12 +10,18 @@
 (.log js/console "foo")
 
 
-(def web-socket (js/WebSocket. "ws://localhost:8080/ws"))
-(set! (.-binaryType web-socket) "arraybuffer")
-
-(set! (.-onopen web-socket)
+(def image-web-socket (js/WebSocket. "ws://localhost:8080/images"))
+(set! (.-binaryType image-web-socket) "arraybuffer")
+(set! (.-onopen image-web-socket)
       (fn [] (.log js/console "foobar")
         (put! web-socket-send-chan @image-state)))
+
+(def stats-web-socket (js/WebSocket. "ws://localhost:8080/stats"))
+(set! (.-onmessage stats-web-socket)
+      (fn [event]
+        (.log js/console (str "stats" (.-data event)))
+        (set! (.-value (.getElementById js/document "stats"))
+              (.-data event))))
 
 
 (def web-socket-recv-chan (chan (dropping-buffer 10)))
@@ -36,36 +42,20 @@
 (set! *print-fn* (fn [x]
                    (.log js/console x)))
 
-(.addEventListener (.getElementById js/document "reload")
-                   "click"
-                   #(put! web-socket-send-chan @image-state))
+(defn link-button [button k op & args]
+  (println button)
+  (.addEventListener (.getElementById js/document button)
+                     "click"
+                     #(do
+                        (apply swap! image-state update-in [k] op args)
+                          (put! web-socket-send-chan @image-state))))
 
-(.addEventListener (.getElementById js/document "zoom-in")
-                   "click"
-                   #(do (swap! image-state update-in [:zoom] + 0.1)
-                        (put! web-socket-send-chan @image-state)))
-
-(.addEventListener (.getElementById js/document "y-plus")
-                   "click"
-                   #(do (swap! image-state update-in [:offset-y] + 10)
-                        (put! web-socket-send-chan @image-state)))
-
-(.addEventListener (.getElementById js/document "y-minus")
-                   "click"
-                   #(do (swap! image-state update-in [:offset-y] - 10)
-                        (put! web-socket-send-chan @image-state)))
-
-(.addEventListener (.getElementById js/document "x-plus")
-                   "click"
-                   #(do (swap! image-state update-in [:offset-x] + 10)
-                        (put! web-socket-send-chan @image-state)))
-
-(.addEventListener (.getElementById js/document "x-minus")
-                   "click"
-                   #(do (swap! image-state update-in [:offset-x] - 10)
-                        (put! web-socket-send-chan @image-state)))
-
-
+(link-button "reload" :zoom identity)
+(link-button "zoom-in" :zoom + 0.1)
+(link-button "y-plus" :offset-y + 10)
+(link-button "y-minus" :offset-y - 10)
+(link-button "x-plus" :offset-x + 10)
+(link-button "x-minus" :offset-x - 10)
 
 (defn image-from-data [data]
   (time
@@ -75,7 +65,7 @@
      (set! (.-id img) "display-image")
      img)))
 
-(set! (.-onmessage web-socket)
+(set! (.-onmessage image-web-socket)
       (fn [event]
         (.log js/console event)
         (.replaceChild (.-parentNode (image-container))
@@ -85,6 +75,6 @@
 (go (try (loop []
            (let [val (<! web-socket-send-chan)]
              (.log js/console (pr-str "sending" val))
-             (.send web-socket (pr-str val))
+             (.send image-web-socket (pr-str val))
              (recur)))
          (catch js/Object ex (.log js/console ex))))

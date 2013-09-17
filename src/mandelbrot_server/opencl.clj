@@ -9,8 +9,9 @@
 
 #_(set! *warn-on-reflection* true)
 
-(def IMAGE-SIZE 512)
-(def ^Long BUFFER-SIZE (* IMAGE-SIZE IMAGE-SIZE))
+(def IMAGE-SIZE-X 890)
+(def IMAGE-SIZE-Y 512)
+(def ^Long BUFFER-SIZE (* IMAGE-SIZE-X IMAGE-SIZE-Y))
 
 
 (defn service-loop [{:keys [request-channel ^CLKernel kernel ^CLQueue queue ^CLBuffer out-buffer] :as service}]
@@ -21,8 +22,8 @@
    (println "looping")
    (when-loop [[args response-channel :as msg] (<!! request-channel)]
               (println msg out-buffer)
-              (.setArgs kernel (into-array Object (concat [out-buffer IMAGE-SIZE IMAGE-SIZE] args)))
-              (let [evt (.enqueueNDRange kernel queue (int-array [IMAGE-SIZE IMAGE-SIZE])
+              (.setArgs kernel (into-array Object (concat [out-buffer IMAGE-SIZE-X IMAGE-SIZE-Y] args)))
+              (let [evt (.enqueueNDRange kernel queue (int-array [IMAGE-SIZE-X IMAGE-SIZE-Y])
                                          (into-array CLEvent []))
                     ptr (.read out-buffer queue (into-array CLEvent [evt]))]
                 (println "done")

@@ -11,14 +11,14 @@
 
 (def server (atom nil))
 
-(def connected-clients (atom []))
+(def connected-clients (atom {}))
 
-(defn remove-client [state channel]
-  (when-let [c (get state channel)]
+(defn remove-client [state k channel]
+  (when-let [c (get-in state [k channel])]
     (close! c))
-  (dissoc state channel))
+  (update-in state [k] dissoc channel))
 
-(defn handle-requests [wc c]
+(defn handle-image-requests [wc c]
   (go
    (loop []
      (when-let [request (<! c)]
@@ -35,27 +35,43 @@
          (send! wc compressed))
        (recur)))))
 
-(defn make-channel [connected-clients channel]
+(defn handle-stats-requests [wc c]
+  (go
+   (loop []
+     (when-let [request (<! c)]
+       (log/info request)
+       (send! wc (pr-str globals/stats)))
+     (recur))))
+
+(defn make-channel [connected-clients k channel handler]
   (swap! connected-clients
          (fn [state]
            (if (state channel)
              state
              (let [c (chan (sliding-buffer 100))]
-               (handle-requests channel c)
-               (assoc state channel c))))))
+               (handler channel c)
+               (assoc-in state [k channel] c))))))
 
-(defn async-handler [{:keys [connected-clients] :as service} req]
+(defn async-handler [{:keys [connected-clients] :as service} k handler req]
   (log/info "async")
   (with-channel req channel
     (log/info "channel")
     (on-close channel (fn [status]
-                        (swap! connected-clients remove-client channel)))
-    (make-channel connected-clients channel)
+                        (swap! connected-clients remove-client k channel)))
+    (make-channel connected-clients k channel handler)
     (on-receive channel
                 (fn [data]
                   (log/info "Connection:" channel)
-                  (when-let [c (get @connected-clients channel)]
-                            (put! c data))))))
+                  (when-let [c (get-in @connected-clients [k channel])]
+                    (put! c data))))))
+
+(defn start-stats-updater [{:keys [connected-clients] :as service}]
+  (go
+   (while true
+     (log/info @globals/stats)
+     (let [val (<! globals/stats-update-chan)]
+       (doseq [[wc] (:stats @connected-clients)]
+         (send! wc (pr-str @globals/stats)))))))
 
 (defrecord HTTPServer [connected-clients
                        running?
@@ -67,9 +83,11 @@
     (if running?
       service
       (let [rs (routes
-                (GET "/ws" [] (partial async-handler service))
+                (GET "/images" [] (partial async-handler service :images handle-image-requests))
+                (GET "/stats" [] (partial async-handler service :stats handle-stats-requests))
                 (route/resources ""))
             server (run-server rs {:port port})]
+        (start-stats-updater service)
         (assoc service
           :running? true
           :route-defs rs
